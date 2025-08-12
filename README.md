@@ -100,3 +100,12 @@ try:
 finally:
     await cs2.close()
 ```
+
+## ⚖️ Legal Compliance Notice
+
+This tool only accesses **publicly available data** on Transfermarkt in accordance with:
+- Transfermarkt's [Terms of Service](https://www.transfermarkt.com/intern/datenschutz)
+- EU Copyright Directive (Article 3)
+- US Computer Fraud and Abuse Act (CFAA) guidelines for public data
+
+**Important**: This is not an official API - we scrape only what's visible to regular users without login.
