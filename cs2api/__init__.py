@@ -168,7 +168,7 @@ class CS2:
         days_offset: int = 180,
         end_date: str = None
     ) -> Dict[str, Any]:
-        today = datetime.now().date()
+        today = datetime.datetime.now().date()
         start_date = today - datetime.timedelta(days=days_offset)
         
         if end_date is None:
