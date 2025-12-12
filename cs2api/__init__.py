@@ -7,7 +7,9 @@ import aiohttp
 
 class CS2:
     """Main CS2 API wrapper interface"""
-    
+    async def _make_request(self, endpoint, params=None):
+        return await self._api._make_request(endpoint, params)
+
     def __init__(self):
         self._api = CS2APIClient()
         self.correct_date = None
@@ -189,7 +191,7 @@ return await self._api._make_request(endpoint, params)
             "with": "teams,tournament,ai_predictions,games,match_maps"
         }
         
-        return await self._make_request(endpoint, params)
+        return await self._api._make_request(endpoint, params)
     
     async def get_team_upcoming_matches(
         self,
@@ -227,8 +229,8 @@ return await self._api._make_request(endpoint, params)
         return await self._api._make_request(endpoint, params)
     
     async def get_team_stats(self, team_slug: str, days: int = 180) -> Dict[str, Any]:
-today = datetime.datetime.now().strftime("%Y-%m-%d")
-from_date = (datetime.datetime.now() - datetime.timedelta(days=days)).strftime("%Y-%m-%d")
+        today = datetime.datetime.now().strftime("%Y-%m-%d")
+        from_date = (datetime.datetime.now() - datetime.timedelta(days=days)).strftime("%Y-%m-%d")
         
         general_endpoint = f"/teams/{team_slug}/general_stats"
         general_params = {
