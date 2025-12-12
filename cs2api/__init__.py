@@ -1,357 +1,457 @@
-from .api import CS2APIClient
-from typing import Dict, Any, Optional
-
+from fastapi import FastAPI, HTTPException, Request
+from urllib.parse import urlparse
+from typing import Any, Dict, Optional, List
+import inspect
 import asyncio
-import datetime
-import aiohttp
 
-class CS2:
-    """Main CS2 API wrapper interface"""
-    async def _make_request(self, endpoint, params=None):
-        return await self._api._make_request(endpoint, params)
+from cs2api import CS2
 
-    def __init__(self):
-        self._api = CS2APIClient()
-        self.correct_date = None
-    
-    async def __aenter__(self):
-        """Enter async context manager"""
-        await self._api._ensure_session()  
-        return self
-    
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
-        """Exit async context manager"""
-        await self._api.close()
+app = FastAPI()
 
-    async def close(self):
-        """Close context manager"""
-        await self._api.close()
 
-    async def get_live_matches(self) -> Dict[str, Any]:
-        """
-        Get current CS2 matches from BO3.gg API
-        
-        Returns:
-            Dictionary containing live/current matches data with:
-            - teams data
-            - tournament info
-            - AI predictions
-            - games details
-            - streams info
-        
-        API Endpoint:
-        https://api.bo3.gg/api/v1/matches?scope=widget-matches&page[offset]=0&page[limit]=100&sort=tier_rank,-start_date&filter[matches.status][in]=current&filter[matches.discipline_id][eq]=1&with=teams,tournament,ai_predictions,games,streams
-        """
-        endpoint = "/matches"
-        params = {
-            "scope": "widget-matches",
-            "page[offset]": 0,  
-            "page[limit]": 100,  
-            "sort": "tier_rank,-start_date",  
-            "filter[matches.status][in]": "current",
-            "filter[matches.discipline_id][eq]": 1,  
-            "with": "teams,tournament,ai_predictions,games,streams"  
-        }
-        return await self._api._make_request(endpoint, params)
-    
-    async def finished(self) -> Dict[str, Any]:
-        """
-        Get current CS2 matches from BO3.gg API
-        
-        Returns:
-            Dictionary containing live/current matches data with:
-            - teams data
-            - tournament info
-            - AI predictions
-            - games details
-            - streams info
-        
-        API Endpoint:
-        https://api.bo3.gg/api/v1/matches?scope=widget-matches&page[offset]=0&page[limit]=100&sort=tier_rank,-start_date&filter[matches.status][in]=current&filter[matches.discipline_id][eq]=1&with=teams,tournament,ai_predictions,games,streams
-        """
-        endpoint = "/matches"
-        params = {
-            "scope": "widget-matches",
-            "page[offset]": 0,  # Changed from string to integer
-            "page[limit]": 100,  # Increased from 1 to 100
-            "sort": "tier_rank,-start_date",  
-            "filter[matches.status][in]": "finished",
-            "filter[matches.discipline_id][eq]": 1,  
-            "with": "teams,tournament,ai_predictions,games,streams"  
-        }
-        
-        return await self._api._make_request(endpoint, params)
-    
-    async def get_live_match_snapshot(self, match_id: int) -> Dict[str, Any]:
-        """
-        Get the last snapshot of a live CS2 match from BO3.gg API
-        
-        Args:
-            match_id: The ID of the match to get snapshot for
-            
-        Returns:
-            Dictionary containing live match snapshot data
-            
-        API Endpoint: 
-        https://api.bo3.gg/api/v1/live/matches/{match_id}/last_snapshot
-        """
-        endpoint = f"/live/matches/{match_id}/last_snapshot"
-        return await self._api._make_request(endpoint)
-    
-    async def get_todays_matches(self) -> Dict[str, Any]:
-        today = datetime.datetime.now().strftime("%Y-%m-%d")
-        endpoint = "/matches"
-        params = {
-            "scope": "widget-matches",
-            "page[offset]": "0",
-            "page[limit]": "100",
-            "sort": "tier_rank,-start_date",
-            "filter[matches.status][in]": "upcoming",
-            "filter[matches.start_date][lt]": f"{today} 23:59",
-            "filter[matches.start_date][gt]": f"{today} 00:00",
-            "filter[matches.discipline_id][eq]": "1",
-            "with": "teams,tournament,ai_predictions,games,streams"
-        }
-        return await self._api._make_request(endpoint, params)
-    
-    async def get_match_details(self, slug: str) -> Dict[str, Any]:
-        endpoint = f"/matches/{slug}"
-        params = {
-            "scope": "show-match",
-            "with": "games,streams,teams,tournament_deep,stage,ai_predictions"
-        }
-        return await self._api._make_request(endpoint, params)
-    
-    async def search_teams(self, query: str, limit: int = 4) -> Dict[str, Any]:
-        endpoint = "/filters/teams"
-        params = {
-            "page[offset]": "0",
-            "page[limit]": str(limit),
-            "filter[teams.discipline_id][eq]": "1",
-            "search_text": query
-        }
-        return await self._api._make_request(endpoint, params)
-    
-    async def get_player_matches(self, player_id: int) -> Dict[str, Any]:
-        """
-        Get matches for a specific player from BO3.gg API
-        
-        Args:
-            player_id: The ID of the player to get matches for
-            
-        Returns:
-            Dictionary containing player's matches data with:
-            - teams data
-            - tournament info
-            - games details
-            - streams info
-            - match status (finished/upcoming/current)
-        
-        API Endpoint:
-        https://api.bo3.gg/api/v1/matches?scope=widget-matches&page[offset]=0&page[limit]=100&sort=-start_date&filter[matches.status][in]=finished,defwin,upcoming,current&filter[matches.player_ids][overlap]=<player_id>&filter[matches.discipline_id][eq]=1&with=teams,tournament,ai_predictions,games,streams
-        """
-        endpoint = "/matches"
-        params = {
-            "scope": "widget-matches",
-            "page[offset]": 0,
-            "page[limit]": 100,
-            "sort": "-start_date",  # Newest matches first
-            "filter[matches.status][in]": "finished,defwin,upcoming,current",
-            "filter[matches.player_ids][overlap]": str(player_id),
-            "filter[matches.discipline_id][eq]": 1,  # CS2
-            "with": "teams,tournament,ai_predictions,games,streams"
-        }
-        return await self._api._make_request(endpoint, params)
-    
-    async def get_team_matches(
-        self,
-        team_id: int,
-        limit: int = 50,
-        days_offset: int = 180,
-        end_date: str = None
-    ) -> Dict[str, Any]:
-        today = datetime.datetime.now().date()
-        start_date = today - datetime.timedelta(days=days_offset)
-        
-        if end_date is None:
-            end_date = today.isoformat()
-        
-        endpoint = "/matches"  
-        
-        params = {
-            "scope": "widget-map-pool",
-            "page[offset]": "0",
-            "page[limit]": str(limit),
-            "sort": "-start_date",
-            "filter[matches.status][in]": "finished",
-            "filter[matches.team_ids][overlap]": str(team_id),
-            "filter[matches.start_date][lt]": end_date,
-            "filter[matches.start_date][gt]": start_date.isoformat(),
-            "filter[matches.discipline_id][eq]": "1",
-            "with": "teams,tournament,ai_predictions,games,match_maps"
-        }
-        
-        return await self._api._make_request(endpoint, params)
-    
-    async def get_team_upcoming_matches(
-        self,
-        team_id: int,
-        limit: int = 100
-    ) -> Dict[str, Any]:
-        """Get upcoming and current matches for a specific team (exact match to working BO3 API URL)"""
-        endpoint = "/matches"  
-        
-        params = {
-            "scope": "widget-matches",
-            "page[offset]": "0",
-            "page[limit]": str(limit),
-            "sort": "-start_date",
-            "filter[matches.status][in]": "upcoming,current",
-            "filter[matches.team_ids][overlap]": str(team_id),
-            "filter[matches.discipline_id][eq]": "1",
-            "with": "teams,tournament,ai_predictions,games,streams"
-        }
-        
-        return await self._api._make_request(endpoint, params)
-    
-    async def get_team_news(self, team_slug: str, limit: int = 5) -> Dict[str, Any]:
-        endpoint = "/base_news"
-        params = {
-            "page[offset]": "0",
-            "page[limit]": str(limit),
-            "sort": "-published_at",
-            "filter[news.rank][in]": "0,1,2",
-            "filter[tags.slug][in]": team_slug,
-            "filter[news.locale][eq]": "en",
-            "filter[base_news.discipline_id][in]": "1",
-            "filter[base_news.section][in]": "1"
-        }
-        return await self._api._make_request(endpoint, params)
-    
-    async def get_team_stats(self, team_slug: str, days: int = 180) -> Dict[str, Any]:
-        today = datetime.datetime.now().strftime("%Y-%m-%d")
-        from_date = (datetime.datetime.now() - datetime.timedelta(days=days)).strftime("%Y-%m-%d")
-        
-        general_endpoint = f"/teams/{team_slug}/general_stats"
-        general_params = {
-            "filter[start_date_to]": today,
-            "filter[start_date_from]": from_date
-        }
-        
-        advanced_endpoint = f"/teams/{team_slug}/advanced_stats"
-        advanced_params = {
-            "filter[begin_at_to]": today,
-            "filter[begin_at_from]": from_date
-        }
-        
-        general_stats, advanced_stats = await asyncio.gather(
-            self._api._make_request(general_endpoint, general_params),
-            self._api._make_request(advanced_endpoint, advanced_params)
-        )
-        
+# -----------------------------
+# BASIC
+# -----------------------------
+@app.get("/ping")
+async def ping():
+    return {"status": "ok"}
+
+
+def extract_slug_from_url(url: str) -> str:
+    """
+    Prima BO3 URL i vadi slug
+    """
+    path = urlparse(url).path
+    parts = [p for p in path.split("/") if p]
+    if not parts:
+        raise ValueError("Cannot extract slug from URL")
+    return parts[-1]
+
+
+# -----------------------------
+# METHODS REGISTRY (whitelist)
+# -----------------------------
+ALLOWED_METHODS = {
+    # MATCH
+    "get_live_matches",
+    "get_live_match_snapshot",
+    "get_match_details",
+    "get_todays_matches",
+    "finished",
+
+    # TEAM
+    "search_teams",
+    "get_team_data",
+    "get_team_matches",
+    "get_team_upcoming_matches",
+    "get_team_news",
+    "get_team_stats",
+    "get_team_transfers",
+
+    # PLAYER
+    "search_players",
+    "get_player_details",
+    "get_player_stats",
+    "get_player_matches",
+    "get_player_transfers",
+}
+
+
+@app.get("/methods")
+async def methods():
+    return {"get_methods": sorted(ALLOWED_METHODS)}
+
+
+@app.get("/describe/{method_name}")
+async def describe(method_name: str):
+    """
+    Pokaže točan signature metode u cs2api wrapperu.
+    """
+    if method_name not in ALLOWED_METHODS:
+        raise HTTPException(status_code=404, detail="Unknown or not allowed method")
+
+    async with CS2() as cs2:
+        fn = getattr(cs2, method_name, None)
+        if not fn:
+            raise HTTPException(status_code=404, detail="Method not found on CS2 client")
+        sig = inspect.signature(fn)
+
+    return {"method": method_name, "signature": str(sig)}
+
+
+@app.get("/call/{method_name}")
+async def call_method(method_name: str, request: Request):
+    """
+    Univerzalni endpoint:
+    - radi za metode bez parametara (npr. get_todays_matches, finished)
+    - radi za keyword parametre (query=..., team_slug=..., team_id=..., slug=..., player_id=...)
+    - radi i za positional fallback
+    """
+    if method_name not in ALLOWED_METHODS:
+        raise HTTPException(status_code=404, detail="Unknown or not allowed method")
+
+    params: Dict[str, Any] = dict(request.query_params)
+
+    try:
+        async with CS2() as cs2:
+            fn = getattr(cs2, method_name, None)
+            if not fn:
+                raise HTTPException(status_code=404, detail="Method not found on CS2 client")
+
+            sig = inspect.signature(fn)
+            expected_names = set(sig.parameters.keys())
+
+            # 1) no-arg methods
+            if len(sig.parameters) == 0:
+                data = await fn()
+                return {"method": method_name, "params": params, "data": data}
+
+            # 2) keyword args (only those method actually accepts)
+            kwargs = {k: v for k, v in params.items() if k in expected_names}
+            if kwargs:
+                data = await fn(**kwargs)
+                return {"method": method_name, "params": params, "resolved_kwargs": kwargs, "data": data}
+
+            # 3) positional fallback
+            if not params:
+                raise HTTPException(status_code=400, detail="No params provided")
+
+            value = next(iter(params.values()))
+            data = await fn(value)
+            return {"method": method_name, "params": params, "resolved_positional": value, "data": data}
+
+    except TypeError as e:
+        raise HTTPException(status_code=400, detail=f"Bad params: {str(e)}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# -----------------------------
+# MATCH RAW + CLEAN
+# -----------------------------
+@app.get("/match")
+async def get_match_raw(url: str | None = None, slug: str | None = None):
+    if url:
+        slug = extract_slug_from_url(url)
+    if not slug:
+        raise HTTPException(status_code=400, detail="Provide 'url' or 'slug'.")
+
+    try:
+        async with CS2() as cs2:
+            match = await cs2.get_match_details(slug=slug)
+        return match
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/match_clean")
+async def get_match_clean(url: str | None = None, slug: str | None = None):
+    if url:
+        slug = extract_slug_from_url(url)
+    if not slug:
+        raise HTTPException(status_code=400, detail="Provide 'url' or 'slug'.")
+
+    async with CS2() as cs2:
+        m = await cs2.get_match_details(slug=slug)
+
+    return {
+        "id": m.get("id"),
+        "slug": m.get("slug"),
+        "status": m.get("status"),
+        "start_date": m.get("start_date"),
+        "bo_type": m.get("bo_type"),
+
+        "tournament": {
+            "id": (m.get("tournament") or {}).get("id"),
+            "name": (m.get("tournament") or {}).get("name"),
+            "slug": (m.get("tournament") or {}).get("slug"),
+            "image_url": (m.get("tournament") or {}).get("image_url"),
+            "parsing_allowed": (m.get("tournament") or {}).get("parsing_allowed"),
+        },
+
+        "team1": {
+            "id": (m.get("team1") or {}).get("id"),
+            "name": (m.get("team1") or {}).get("name"),
+            "slug": (m.get("team1") or {}).get("slug"),
+            "rank": (m.get("team1") or {}).get("rank"),
+            "image_url": (m.get("team1") or {}).get("image_url"),
+        },
+
+        "team2": {
+            "id": (m.get("team2") or {}).get("id"),
+            "name": (m.get("team2") or {}).get("name"),
+            "slug": (m.get("team2") or {}).get("slug"),
+            "rank": (m.get("team2") or {}).get("rank"),
+            "image_url": (m.get("team2") or {}).get("image_url"),
+        },
+
+        "ai_prediction": {
+            "team1_score": (m.get("ai_predictions") or {}).get("prediction_team1_score"),
+            "team2_score": (m.get("ai_predictions") or {}).get("prediction_team2_score"),
+            "winner_team_id": (m.get("ai_predictions") or {}).get("prediction_winner_team_id"),
+        },
+
+        "odds": {
+            "provider": (m.get("bet_updates") or {}).get("provider"),
+            "team1_coeff": ((m.get("bet_updates") or {}).get("team_1") or {}).get("coeff"),
+            "team2_coeff": ((m.get("bet_updates") or {}).get("team_2") or {}).get("coeff"),
+            "markets_count": (m.get("bet_updates") or {}).get("markets_count"),
+        },
+
+        "streams": [
+            {
+                "platform": s.get("platform"),
+                "language": s.get("language"),
+                "url": s.get("raw_url"),
+            }
+            for s in (m.get("streams") or [])
+        ],
+    }
+
+
+# -----------------------------
+# ENRICHED MATCH
+# (lineups + form + h2h + map winrate + odds)
+# -----------------------------
+def _is_finished(m: dict) -> bool:
+    st = (m.get("status") or "").lower()
+    pst = (m.get("parsed_status") or "").lower()
+    return st == "finished" or pst == "finished"
+
+
+def _winner_team_id(m: dict) -> Optional[int]:
+    t1 = m.get("team1_id") or (m.get("team1") or {}).get("id")
+    t2 = m.get("team2_id") or (m.get("team2") or {}).get("id")
+    s1 = m.get("team1_score")
+    s2 = m.get("team2_score")
+
+    if t1 is None or t2 is None:
+        return None
+    if not isinstance(s1, int) or not isinstance(s2, int):
+        return None
+
+    if s1 > s2:
+        return int(t1)
+    if s2 > s1:
+        return int(t2)
+    return None
+
+
+def _opponent_id(m: dict, team_id: int) -> Optional[int]:
+    t1 = m.get("team1_id") or (m.get("team1") or {}).get("id")
+    t2 = m.get("team2_id") or (m.get("team2") or {}).get("id")
+    if t1 == team_id and t2:
+        return int(t2)
+    if t2 == team_id and t1:
+        return int(t1)
+    return None
+
+
+def _safe_list(x: Any) -> List[dict]:
+    return x if isinstance(x, list) else []
+
+
+def _compute_form(team_id: int, matches: List[dict], take: int = 10) -> Dict[str, Any]:
+    finished = [m for m in matches if _is_finished(m)]
+    finished = finished[:take]
+
+    wins = losses = 0
+    recent = []
+    for m in finished:
+        w = _winner_team_id(m)
+        if w is None:
+            continue
+        is_win = (w == team_id)
+        recent.append({
+            "id": m.get("id"),
+            "slug": m.get("slug"),
+            "start_date": m.get("start_date"),
+            "win": is_win,
+            "team1_score": m.get("team1_score"),
+            "team2_score": m.get("team2_score"),
+        })
+        if is_win:
+            wins += 1
+        else:
+            losses += 1
+
+    # streak (from most recent)
+    streak = 0
+    for r in recent:
+        if r["win"]:
+            if streak >= 0:
+                streak += 1
+            else:
+                break
+        else:
+            if streak <= 0:
+                streak -= 1
+            else:
+                break
+
+    return {
+        "sample_size": len(recent),
+        "wins": wins,
+        "losses": losses,
+        "streak": streak,
+        "recent": recent,
+    }
+
+
+def _compute_h2h(team1_id: int, team2_id: int, matches_team1: List[dict], limit: int = 10) -> Dict[str, Any]:
+    h2h = []
+    for m in matches_team1:
+        opp = _opponent_id(m, team1_id)
+        if opp == team2_id:
+            h2h.append(m)
+        if len(h2h) >= limit:
+            break
+
+    t1w = t2w = 0
+    out = []
+    for m in h2h:
+        w = _winner_team_id(m)
+        if w == team1_id:
+            t1w += 1
+        elif w == team2_id:
+            t2w += 1
+        out.append({
+            "id": m.get("id"),
+            "slug": m.get("slug"),
+            "start_date": m.get("start_date"),
+            "team1_score": m.get("team1_score"),
+            "team2_score": m.get("team2_score"),
+        })
+
+    return {
+        "sample_size": len(out),
+        "team1_wins": t1w,
+        "team2_wins": t2w,
+        "matches": out,
+    }
+
+
+def _extract_odds(md: dict) -> Optional[dict]:
+    bu = md.get("bet_updates") or {}
+    if not bu:
+        return None
+    return {
+        "provider": bu.get("provider"),
+        "markets_count": bu.get("markets_count"),
+        "team_1": bu.get("team_1"),
+        "team_2": bu.get("team_2"),
+        "path": bu.get("path"),
+    }
+
+
+def _extract_lineups(md: dict) -> Optional[dict]:
+    """
+    BO3 payloads vary; if they include roster/players/lineups return them, else None.
+    """
+    for key in ("lineups", "players", "rosters"):
+        val = md.get(key)
+        if val:
+            return {key: val}
+    return None
+
+
+def _map_winrate_from_team_stats(team_stats: dict) -> Optional[dict]:
+    """
+    Your cs2api get_team_stats returns:
+      {"general_stats": {...}, "advanced_stats": {...}}
+    If any map breakdown exists, return it. Otherwise None.
+    """
+    if not isinstance(team_stats, dict):
+        return None
+
+    # Try common places
+    general = team_stats.get("general_stats") or {}
+    advanced = team_stats.get("advanced_stats") or {}
+
+    # Some APIs put map pool here; we just surface whatever exists.
+    for container in (general, advanced, team_stats):
+        if not isinstance(container, dict):
+            continue
+        for key in ("maps", "map_stats", "map_pool", "mapWinrate", "map_winrate", "map_stats_data"):
+            if key in container and container.get(key):
+                return {key: container.get(key)}
+    return None
+
+
+@app.get("/match_enriched")
+async def match_enriched(slug: str, form_last: int = 10, h2h_last: int = 10):
+    """
+    One-call JSON for Make:
+      - lineups (if present)
+      - form (last N finished matches)
+      - h2h (last N between these teams)
+      - map winrate (from team_stats if available)
+      - odds (from match_details bet_updates)
+    """
+    try:
+        async with CS2() as cs2:
+            md = await cs2.get_match_details(slug=slug)
+
+            team1 = md.get("team1") or {}
+            team2 = md.get("team2") or {}
+
+            team1_id = team1.get("id") or md.get("team1_id")
+            team2_id = team2.get("id") or md.get("team2_id")
+            team1_slug = team1.get("slug")
+            team2_slug = team2.get("slug")
+
+            if team1_id is None or team2_id is None:
+                raise HTTPException(status_code=500, detail="Missing team ids in match_details")
+
+            # Fetch in parallel
+            tasks = [
+                cs2.get_team_matches(team_id=int(team1_id)),
+                cs2.get_team_matches(team_id=int(team2_id)),
+            ]
+
+            # stats are optional but helpful for map winrate
+            if team1_slug:
+                tasks.append(cs2.get_team_stats(team_slug=str(team1_slug)))
+            else:
+                tasks.append(asyncio.sleep(0, result=None))
+
+            if team2_slug:
+                tasks.append(cs2.get_team_stats(team_slug=str(team2_slug)))
+            else:
+                tasks.append(asyncio.sleep(0, result=None))
+
+            t1_matches, t2_matches, t1_stats, t2_stats = await asyncio.gather(*tasks)
+
+        # Ensure lists
+        t1_matches_list = _safe_list(t1_matches)
+        t2_matches_list = _safe_list(t2_matches)
+
         return {
-            "general_stats": general_stats,
-            "advanced_stats": advanced_stats
+            "match": {
+                "id": md.get("id"),
+                "slug": md.get("slug"),
+                "status": md.get("status"),
+                "start_date": md.get("start_date"),
+                "bo_type": md.get("bo_type"),
+                "tournament": md.get("tournament"),
+                "team1": team1,
+                "team2": team2,
+            },
+            "odds": _extract_odds(md),
+            "lineups": _extract_lineups(md),
+            "form": {
+                "team1": _compute_form(int(team1_id), t1_matches_list, take=int(form_last)),
+                "team2": _compute_form(int(team2_id), t2_matches_list, take=int(form_last)),
+            },
+            "h2h": _compute_h2h(int(team1_id), int(team2_id), t1_matches_list, limit=int(h2h_last)),
+            "map_winrate": {
+                "team1": _map_winrate_from_team_stats(t1_stats or {}) if isinstance(t1_stats, dict) else None,
+                "team2": _map_winrate_from_team_stats(t2_stats or {}) if isinstance(t2_stats, dict) else None,
+                "note": "If null, BO3 team stats payload doesn't include per-map winrate. We can compute it by calling get_match_details for many matches (heavier).",
+            },
         }
 
-    async def search_players(self, query: str, limit: int = 4) -> Dict[str, Any]:
-        endpoint = "/filters/players"
-        params = {
-            "page[offset]": "0",
-            "page[limit]": str(limit),
-            "filter[discipline_id][eq]": "1",
-            "with": "country",
-            "search_text": query
-        }
-        return await self._api._make_request(endpoint, params)
-    
-    async def get_team_data(
-        self,
-        team_slug: str,  
-        locale: str = "en"  
-    ) -> Dict[str, Any]:
-        """
-        Fetches general team data from BO3.GG API.
-        
-        Args:
-            team_slug: The URL-friendly team name (e.g. "natus-vincere")
-            locale: Preferred language (e.g. "en", "ru")
-        
-        Returns:
-            Dictionary containing team data
-            
-        Example:
-            >>> await api.get_team_data("natus-vincere")
-            {id: 123, name: "Natus Vincere", ...}
-        """
-        endpoint = f"/teams/{team_slug}"
-        params = {
-            "prefer_locale": locale
-        }
-        
-        return await self._api._make_request(endpoint, params)
-    
-    async def get_player_details(self, slug: str) -> Dict[str, Any]:
-        endpoint = f"/players/{slug}"
-        params = {"prefer_locale": "en"}
-        return await self._api._make_request(endpoint, params)
-    
-    async def get_player_stats(self, slug: str, days: int = 180) -> Dict[str, Any]:
-        today = datetime.datetime.now().strftime("%Y-%m-%d")
-        from_date = (datetime.datetime.now() - datetime.timedelta(days=days)).strftime("%Y-%m-%d")
-        
-        general_endpoint = f"/players/{slug}/general_stats"
-        general_params = {
-            "filter[start_date_to]": today,
-            "filter[start_date_from]": from_date
-        }
-        
-        map_endpoint = f"/players/{slug}/map_stats"
-        map_params = {
-            "filter[begin_at_to]": today,
-            "filter[begin_at_from]": from_date
-        }
-        
-        accuracy_endpoint = f"/players/{slug}/accuracy_stats"
-        accuracy_params = {
-            "filter[begin_at_to]": today,
-            "filter[begin_at_from]": from_date
-        }
-        
-        general_stats, map_stats, accuracy_stats = await asyncio.gather(
-            self._api._make_request(general_endpoint, general_params),
-            self._api._make_request(map_endpoint, map_params),
-            self._api._make_request(accuracy_endpoint, accuracy_params)
-        )
-        
-        return {
-            "general_stats": general_stats,
-            "map_stats": map_stats,
-            "accuracy_stats": accuracy_stats
-        }
-    
-    async def get_team_transfers(self, team_id: int, limit: int = 10) -> Dict[str, Any]:
-        endpoint = "/player_transfers"
-        params = {
-            "join": "teams_deep",
-            "page[offset]": "0",
-            "page[limit]": str(limit),
-            "sort": "-action_date",
-            "filter[team_to.id,team_from.id][or]": f"{team_id},{team_id}",
-            "with": "teams,player"
-        }
-        return await self._api._make_request(endpoint, params)
-    
-    async def get_player_transfers(self, player_id: int, limit: int = 10) -> Dict[str, Any]:
-        endpoint = "/player_transfers"
-        params = {
-            "join": "teams_deep",
-            "page[offset]": "0",
-            "page[limit]": str(limit),
-            "sort": "-action_date",
-            "filter[player_id][eq]": str(player_id),
-            "filter[is_coach][eq]": "false",
-            "with": "teams,player"
-        }
-        return await self._api._make_request(endpoint, params)
-    
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
