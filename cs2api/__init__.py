@@ -50,7 +50,7 @@ class CS2:
             "filter[matches.discipline_id][eq]": 1,  
             "with": "teams,tournament,ai_predictions,games,streams"  
         }
-        return await self._api._make_request(endpoint, params)
+return await self._api._make_request(endpoint, params)
     
     async def finished(self) -> Dict[str, Any]:
         """
